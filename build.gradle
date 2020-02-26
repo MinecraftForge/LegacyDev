@@ -1,0 +1,147 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+}
+
+plugins {
+  id 'net.minecrell.licenser' version '0.3'
+  id 'org.ajoberstar.grgit' version '4.0.0'
+  id 'com.github.johnrengelman.shadow' version '5.2.0'
+}
+
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'idea'
+
+repositories {
+    mavenCentral()
+}
+
+
+ext {
+    TAG = '0.0'
+}
+def gitVersion = {
+    def raw = grgit.describe(longDescr: true, tags:true)
+    def desc = (raw == null ? '0.0-0-unknown' : grgit.describe(longDescr: true, tags:true)).split('-') as List
+    def hash = desc.remove(desc.size() - 1)
+    def offset = desc.remove(desc.size() - 1)
+    TAG = desc.join('-')
+    def branch = grgit.branch.current().name
+    if (branch in ['master', 'HEAD'])
+        branch = null
+    if (branch != null && branch.endsWith('.x') && TAG.equals(branch.substring(0, branch.length() - 2)))
+        branch = null
+    return "${TAG}.${offset}${t -> if (branch != null) t << '-' + branch}".toString()
+}
+
+group = 'net.minecraftforge'
+archivesBaseName = 'legacydev'
+version = gitVersion()
+targetCompatibility = sourceCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
+license {
+  header project.file('LICENSE-header.txt')
+  include 'net/minecraftforge/legacydev/**/*.java'
+  newLine false
+}
+
+ext {
+    MANIFEST = manifest{
+        attributes([
+            'Specification-Title': 'accesstransformers',
+            'Specification-Vendor': 'Forge Development LLC',
+            'Specification-Version': TAG,
+            'Implementation-Title': project.name,
+            'Implementation-Version': "${version}+${System.getenv("BUILD_NUMBER")?:0}+${grgit.head().abbreviatedId}",
+            'Implementation-Vendor': 'Forge Development LLC',
+            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            'Git-Commit': grgit.head().abbreviatedId,
+            'Git-Branch': grgit.branch.current().getName() 
+        ] as LinkedHashMap, 'net/minecraftforge/legacydev/')
+    }
+}
+
+dependencies {
+    compile 'net.sf.jopt-simple:jopt-simple:5.0.4'
+}
+
+compileJava {
+    options.encoding = 'UTF-8'
+}
+
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+    manifest.from(MANIFEST)
+}
+
+task relocateShadowJar(type: com.github.jengelman.gradle.plugins.shadow.tasks.ConfigureShadowRelocation) {
+    target = tasks.shadowJar
+    prefix = "${project.group}.${project.name}.reloc"
+}
+
+shadowJar {
+    dependsOn(relocateShadowJar)
+    classifier 'fatjar'
+    manifest.from(MANIFEST)
+}
+
+artifacts {
+    archives shadowJar
+    archives sourcesJar
+}
+
+jar {
+    manifest.from(MANIFEST)
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact sourcesJar
+            artifact shadowJar
+            artifact jar
+            pom {
+                name = project.archivesBaseName
+                packaging = 'jar'
+                description = 'Minecraft Forge Legacy Dev'
+                url = 'https://github.com/MinecraftForge/LegacyDev'
+
+                scm {
+                    url = 'https://github.com/MinecraftForge/LegacyDev'
+                    connection = 'scm:git:git://github.com/MinecraftForge/LegacyDev.git'
+                    developerConnection = 'scm:git:git@github.com:MinecraftForge/LegacyDev.git'
+                }
+
+                issueManagement {
+                    system = 'github'
+                    url = 'https://github.com/MinecraftForge/LegacyDev/issues'
+                }
+
+                developers {
+                    developer {
+                        id = 'LexManos'
+                        name = 'Lex Manos'
+                    }
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            if (project.hasProperty('forgeMavenPassword')) {
+                credentials {
+                    username project.properties.forgeMavenUser
+                    password project.properties.forgeMavenPassword
+                }
+                url 'https://files.minecraftforge.net/maven/manage/upload'
+            } else {
+                url 'file://' + rootProject.file('repo').getAbsolutePath()
+            }
+        }
+    }
+}
