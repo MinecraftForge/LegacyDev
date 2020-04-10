@@ -12,15 +12,12 @@ pipeline {
     }
 
     stages {
-        stage('fetch') {
-            steps {
-                checkout scm
-            }
-        }
         stage('buildandtest') {
             steps {
                 sh './gradlew ${GRADLE_ARGS} --refresh-dependencies --continue build test'
                 script {
+                    env.MYGROUP   = sh(returnStdout: true, script: './gradlew ${GRADLE_ARGS} properties -q | grep "group:" | awk \'{print $2}\'').trim()
+                    env.MYNAME    = sh(returnStdout: true, script: './gradlew ${GRADLE_ARGS} properties -q | grep "name:" | awk \'{print $2}\'').trim()
                     env.MYVERSION = sh(returnStdout: true, script: './gradlew ${GRADLE_ARGS} properties -q | grep "version:" | awk \'{print $2}\'').trim()
                 }
             }
@@ -42,15 +39,8 @@ pipeline {
             }
             steps {
                 sh './gradlew ${GRADLE_ARGS} publish -PforgeMavenUser=${FORGE_MAVEN_USR} -PforgeMavenPassword=${FORGE_MAVEN_PSW}'
-                sh 'curl --user ${FORGE_MAVEN} http://files.minecraftforge.net/maven/manage/promote/latest/net.minecraftforge.accesstransformers/${MYVERSION}'
+                sh 'curl --user ${FORGE_MAVEN} http://files.minecraftforge.net/maven/manage/promote/latest/${MYGROUP}.${MYNAME}/${MYVERSION}'
             }
-        }
-    }
-    post {
-        always {
-            archiveArtifacts artifacts: 'build/libs/**/*.jar', fingerprint: true
-            junit 'build/test-results/*/*.xml'
-            jacoco sourcePattern: '**/src/*/java'
         }
     }
 }
