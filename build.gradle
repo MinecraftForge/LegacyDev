@@ -1,32 +1,18 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-}
-
 plugins {
-  id 'net.minecrell.licenser' version '0.3'
-  id 'org.ajoberstar.grgit' version '4.0.0'
-  id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'java'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'org.cadixdev.licenser' version '0.6.1'
+    id 'org.ajoberstar.grgit' version '4.0.0'
 }
-
-apply plugin: 'maven'
-apply plugin: 'maven-publish'
-apply plugin: 'java'
-apply plugin: 'eclipse'
-apply plugin: 'idea'
-
-repositories {
-    mavenCentral()
-}
-
 
 ext {
     TAG = '0.0'
 }
 def gitVersion = {
-    def raw = grgit.describe(longDescr: true, tags:true)
-    def desc = (raw == null ? '0.0-0-unknown' : grgit.describe(longDescr: true, tags:true)).split('-') as List
+    def raw = grgit.describe(longDescr: true, tags: true)
+    def desc = (raw == null ? '0.0-0-unknown' : grgit.describe(longDescr: true, tags: true)).split('-') as List
     def hash = desc.remove(desc.size() - 1)
     def offset = desc.remove(desc.size() - 1)
     TAG = desc.join('-')
@@ -44,29 +30,42 @@ version = gitVersion()
 targetCompatibility = sourceCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 
 license {
-  header project.file('LICENSE-header.txt')
-  include 'net/minecraftforge/legacydev/**/*.java'
-  newLine false
+    header project.file('LICENSE-header.txt')
+    ext["year"] = '2016-' + Calendar.getInstance().get(Calendar.YEAR)
+    include 'net/minecraftforge/legacydev/**/*.java'
+    newLine false
 }
 
 ext {
-    MANIFEST = manifest{
+    MANIFEST = manifest {
         attributes([
-            'Specification-Title': 'accesstransformers',
-            'Specification-Vendor': 'Forge Development LLC',
-            'Specification-Version': TAG,
-            'Implementation-Title': project.name,
-            'Implementation-Version': "${version}+${System.getenv("BUILD_NUMBER")?:0}+${grgit.head().abbreviatedId}",
-            'Implementation-Vendor': 'Forge Development LLC',
-            'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            'Git-Commit': grgit.head().abbreviatedId,
-            'Git-Branch': grgit.branch.current().getName() 
+                'Specification-Title'     : 'accesstransformers',
+                'Specification-Vendor'    : 'Forge Development LLC',
+                'Specification-Version'   : TAG,
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : "${version}+${System.getenv("BUILD_NUMBER") ?: 0}+${grgit.head().abbreviatedId}",
+                'Implementation-Vendor'   : 'Forge Development LLC',
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'Git-Commit'              : grgit.head().abbreviatedId,
+                'Git-Branch'              : grgit.branch.current().getName()
         ] as LinkedHashMap, 'net/minecraftforge/legacydev/')
     }
 }
 
+repositories {
+    mavenCentral()
+    maven {
+        name 'mojang'
+        url 'https://libraries.minecraft.net/'
+    }
+}
+
 dependencies {
-    compile 'net.sf.jopt-simple:jopt-simple:5.0.4'
+    implementation 'net.sf.jopt-simple:jopt-simple:5.0.4'
+    implementation('net.minecraft:launchwrapper:1.12') {
+        exclude group: 'org.ow2.asm'
+    }
+    implementation 'com.google.guava:guava:21.0'
 }
 
 compileJava {
@@ -79,19 +78,7 @@ task sourcesJar(type: Jar, dependsOn: classes) {
     manifest.from(MANIFEST)
 }
 
-task relocateShadowJar(type: com.github.jengelman.gradle.plugins.shadow.tasks.ConfigureShadowRelocation) {
-    target = tasks.shadowJar
-    prefix = "${project.group}.${project.name}.reloc"
-}
-
-shadowJar {
-    dependsOn(relocateShadowJar)
-    classifier 'fatjar'
-    manifest.from(MANIFEST)
-}
-
 artifacts {
-    archives shadowJar
     archives sourcesJar
 }
 
@@ -103,7 +90,6 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             artifact sourcesJar
-            artifact shadowJar
             artifact jar
             pom {
                 name = project.archivesBaseName
